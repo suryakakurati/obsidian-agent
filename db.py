@@ -1,6 +1,7 @@
 from pathlib import Path
 import sqlite3
 import hashlib
+from llm import generate_summary
 
 DB_PATH = Path("data/vault.db")
 
@@ -37,7 +38,7 @@ def upsert_note(file_path: Path, conn: sqlite3.Connection, file_hash: str):
     cursor = conn.cursor()
 
     content = file_path.read_text(encoding="utf-8", errors="ignore")
-    summary = content[:300]
+    summary = generate_summary(content)
     last_modified = file_path.stat().st_mtime
 
     cursor.execute("""
