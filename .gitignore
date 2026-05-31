@@ -1,0 +1,14 @@
+# environment
+.env
+
+# database
+data/
+*.db
+
+# python
+__pycache__/
+*.pyc
+
+# venv
+env/
+venv/
