@@ -1,5 +1,7 @@
 from pathlib import Path
 import sqlite3
+import time
+
 
 from db import(
     DB_PATH,
@@ -13,6 +15,7 @@ from config import VAULT_PATH
 def add_all(vault_path: Path = VAULT_PATH):
     initialize_db()
     conn = sqlite3.connect(DB_PATH)
+    start_time = time.time()
 
     for file_path in vault_path.rglob("*.md"):
         file_hash = get_file_hash(file_path)
@@ -20,6 +23,8 @@ def add_all(vault_path: Path = VAULT_PATH):
 
         upsert_note(file_path, conn, file_hash)
 
+    end_time = time.time()
+    print(f"Indexing completed in {end_time - start_time:.2f} seconds.")
     conn.commit()
     conn.close()
 
