@@ -34,27 +34,32 @@ def get_file_hash(file_path: Path) -> str:
     return hasher.hexdigest()
 
 
-def upsert_note(file_path: Path, conn: sqlite3.Connection, file_hash: str):
-    cursor = conn.cursor()
 
+
+def build_note_record(file_path: Path, file_hash: str):
     content = file_path.read_text(encoding="utf-8", errors="ignore")
+
     embedding_vec = generate_embedding(content)
     embedding_vec = normalize(embedding_vec)
     embedding_blob = to_blob(embedding_vec)
 
     last_modified = file_path.stat().st_mtime
 
-    cursor.execute("""
+    return (
+        str(file_path),
+        file_hash,
+        embedding_blob,
+        last_modified
+    )
+
+def upsert_notes_batch(records, conn: sqlite3.Connection):
+    cursor = conn.cursor()
+
+    cursor.executemany("""
         INSERT INTO notes (path, hash, embedding, last_modified)
         VALUES (?, ?, ?, ?)
         ON CONFLICT(path) DO UPDATE SET
             hash=excluded.hash,
             embedding=excluded.embedding,
             last_modified=excluded.last_modified
-    """, (
-        str(file_path),
-        file_hash,
-        embedding_blob,
-        last_modified
-    ))
-
+    """, records)
