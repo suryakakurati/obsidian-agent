@@ -17,9 +17,3 @@ def generate_embedding(text: str) -> list[float]:
     except Exception as e:
         print(f"Embedding generation failed: {e}")
         return []
-def to_blob(vec):
-    return np.array(vec, dtype=np.float32).tobytes()
-
-
-def from_blob(blob):
-    return np.frombuffer(blob, dtype=np.float32)
