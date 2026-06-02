@@ -7,6 +7,19 @@ from llm import generate_embedding
 from vector import from_blob, normalize
 from db import DB_PATH
 
+
+from config import VAULT_PATH
+
+def get_note_content(note_name: str):
+    for file_path in VAULT_PATH.rglob("*.md"):
+        if file_path.name == note_name:
+            return file_path.read_text(
+                encoding="utf-8",
+                errors="ignore"
+            )
+
+    return None
+
 def load_embeddings():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()

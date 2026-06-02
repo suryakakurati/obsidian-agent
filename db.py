@@ -3,10 +3,7 @@ import sqlite3
 import hashlib
 from llm import generate_embedding
 from vector import normalize, to_blob
-
-
-
-DB_PATH = Path("data/vault.db")
+from config import DB_PATH
 
 
 def initialize_db():
