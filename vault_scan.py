@@ -33,7 +33,7 @@ def scan_updates(vault_path: Path = VAULT_PATH):
     cursor = conn.cursor()
 
     changed_files = []
-
+    start_time = time.time()
     for file_path in vault_path.rglob("*.md"):
         cursor.execute(
             "SELECT hash, last_modified FROM notes WHERE path = ?",
@@ -46,6 +46,7 @@ def scan_updates(vault_path: Path = VAULT_PATH):
 
         if row is None:
             file_hash = get_file_hash(file_path)
+            print("Indexing:", file_path)
             upsert_note(file_path, conn, file_hash)
             changed_files.append(file_path)
             continue
@@ -64,5 +65,8 @@ def scan_updates(vault_path: Path = VAULT_PATH):
 
     conn.commit()
     conn.close()
+    end_time = time.time()
+    print(f"Scan completed in {end_time - start_time:.2f} seconds.")
+
 
     return changed_files
