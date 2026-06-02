@@ -1,7 +1,10 @@
 from pathlib import Path
 import sqlite3
 import hashlib
-from llm import generate_summary, generate_embedding, to_blob
+from llm import generate_embedding
+from vector import normalize, to_blob
+
+
 
 DB_PATH = Path("data/vault.db")
 
@@ -15,7 +18,6 @@ def initialize_db():
         id INTEGER PRIMARY KEY,
         path TEXT UNIQUE,
         hash TEXT,
-        summary TEXT,
         embedding BLOB,
         last_modified REAL
     )
@@ -39,25 +41,23 @@ def upsert_note(file_path: Path, conn: sqlite3.Connection, file_hash: str):
     cursor = conn.cursor()
 
     content = file_path.read_text(encoding="utf-8", errors="ignore")
-    summary = generate_summary(content)
-
-    embedding_vec = generate_embedding(summary)
+    embedding_vec = generate_embedding(content)
+    embedding_vec = normalize(embedding_vec)
     embedding_blob = to_blob(embedding_vec)
 
     last_modified = file_path.stat().st_mtime
 
     cursor.execute("""
-        INSERT INTO notes (path, hash, summary, embedding, last_modified)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO notes (path, hash, embedding, last_modified)
+        VALUES (?, ?, ?, ?)
         ON CONFLICT(path) DO UPDATE SET
             hash=excluded.hash,
-            summary=excluded.summary,
             embedding=excluded.embedding,
             last_modified=excluded.last_modified
     """, (
         str(file_path),
         file_hash,
-        summary,
         embedding_blob,
         last_modified
     ))
+
