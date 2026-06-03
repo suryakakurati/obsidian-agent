@@ -9,11 +9,6 @@ def generate_embedding(text: str) -> list[float]:
         "prompt": text
     }
 
-    try:
-        res = requests.post(f"{OLLAMA_URL}/api/embeddings", json=payload, timeout=60)
-        data = res.json()
-        return data["embedding"] 
-
-    except Exception as e:
-        print(f"Embedding generation failed: {e}")
-        return []
+    res = requests.post(f"{OLLAMA_URL}/api/embeddings", json=payload, timeout=60)
+    data = res.json()
+    return data["embedding"]

@@ -34,8 +34,6 @@ def get_file_hash(file_path: Path) -> str:
     return hasher.hexdigest()
 
 
-
-
 def build_note_record(file_path: Path, file_hash: str):
     content = file_path.read_text(encoding="utf-8", errors="ignore")
 
@@ -55,11 +53,17 @@ def build_note_record(file_path: Path, file_hash: str):
 def upsert_notes_batch(records, conn: sqlite3.Connection):
     cursor = conn.cursor()
 
-    cursor.executemany("""
-        INSERT INTO notes (path, hash, embedding, last_modified)
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT(path) DO UPDATE SET
-            hash=excluded.hash,
-            embedding=excluded.embedding,
-            last_modified=excluded.last_modified
-    """, records)
+    try:
+        cursor.execute("SAVEPOINT upsert_batch")
+        cursor.executemany("""
+            INSERT INTO notes (path, hash, embedding, last_modified)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(path) DO UPDATE SET
+                hash=excluded.hash,
+                embedding=excluded.embedding,
+                last_modified=excluded.last_modified
+        """, records)
+        cursor.execute("RELEASE SAVEPOINT upsert_batch")
+    except sqlite3.Error:
+        cursor.execute("ROLLBACK TO SAVEPOINT upsert_batch")
+        raise
