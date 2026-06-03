@@ -1,6 +1,7 @@
 from pathlib import Path
 import sqlite3
 import time
+
 from db import (
     DB_PATH,
     initialize_db,
@@ -11,21 +12,48 @@ from db import (
 
 from config import VAULT_PATH
 
+
+PROGRESS_INTERVAL = 1000
+
+
 def add_all(vault_path: Path = VAULT_PATH):
     initialize_db()
+
     conn = sqlite3.connect(DB_PATH)
+
     start_time = time.time()
 
     batch = []
-    batch_size = 50
+    batch_size = 100
+
+    processed = 0
+    total_embedding_time = 0.0
 
     try:
         for file_path in vault_path.rglob("*.md"):
             file_hash = get_file_hash(file_path)
-            print("Indexing:", file_path)
 
-            record = build_note_record(file_path, file_hash)
+            record, embedding_time = build_note_record(
+                file_path,
+                file_hash
+            )
+
             batch.append(record)
+
+            processed += 1
+            total_embedding_time += embedding_time
+
+            if processed % PROGRESS_INTERVAL == 0:
+                elapsed = time.time() - start_time
+
+                avg_note_time = elapsed / processed
+                avg_embedding_time = total_embedding_time / processed
+
+                print(
+                    f"\n[{processed:,} notes] "
+                    f"avg/note={avg_note_time:.4f}s "
+                    f"avg/embed={avg_embedding_time:.4f}s\n"
+                )
 
             if len(batch) >= batch_size:
                 upsert_notes_batch(batch, conn)
@@ -35,13 +63,19 @@ def add_all(vault_path: Path = VAULT_PATH):
             upsert_notes_batch(batch, conn)
 
         conn.commit()
+
     except Exception:
         conn.rollback()
         raise
+
     finally:
         conn.close()
 
-    print(f"Indexing completed in {time.time() - start_time:.2f} seconds.")
+    print(
+        f"\nIndexing completed in "
+        f"{time.time() - start_time:.2f} seconds.\n"
+    )
+
 
 def scan_updates(vault_path: Path = VAULT_PATH):
     conn = sqlite3.connect(DB_PATH)
@@ -51,6 +85,9 @@ def scan_updates(vault_path: Path = VAULT_PATH):
     batch = []
 
     start_time = time.time()
+
+    processed = 0
+    total_embedding_time = 0.0
 
     try:
         for file_path in vault_path.rglob("*.md"):
@@ -64,10 +101,19 @@ def scan_updates(vault_path: Path = VAULT_PATH):
 
             if row is None:
                 file_hash = get_file_hash(file_path)
-                print("Indexing:", file_path)
 
-                batch.append(build_note_record(file_path, file_hash))
+                record, embedding_time = build_note_record(
+                    file_path,
+                    file_hash
+                )
+
+                batch.append(record)
+
                 changed_files.append(file_path)
+
+                processed += 1
+                total_embedding_time += embedding_time
+
                 continue
 
             old_hash, old_mtime = row
@@ -78,19 +124,47 @@ def scan_updates(vault_path: Path = VAULT_PATH):
             file_hash = get_file_hash(file_path)
 
             if file_hash != old_hash:
-                batch.append(build_note_record(file_path, file_hash))
+                record, embedding_time = build_note_record(
+                    file_path,
+                    file_hash
+                )
+
+                batch.append(record)
+
                 changed_files.append(file_path)
+
+                processed += 1
+                total_embedding_time += embedding_time
+
+                if processed % PROGRESS_INTERVAL == 0:
+                    elapsed = time.time() - start_time
+
+                    avg_note_time = elapsed / processed
+                    avg_embedding_time = (
+                        total_embedding_time / processed
+                    )
+
+                    print(
+                        f"\n[{processed:,} notes] "
+                        f"avg/note={avg_note_time:.4f}s "
+                        f"avg/embed={avg_embedding_time:.4f}s\n"
+                    )
 
         if batch:
             upsert_notes_batch(batch, conn)
 
         conn.commit()
+
     except Exception:
         conn.rollback()
         raise
+
     finally:
         conn.close()
 
-    print(f"Scan completed in {time.time() - start_time:.2f} seconds.")
+    print(
+        f"\nScan completed in "
+        f"{time.time() - start_time:.2f} seconds.\n"
+    )
 
     return changed_files
