@@ -2,6 +2,7 @@ from pathlib import Path
 import sqlite3
 import numpy as np
 import faiss
+import json
 
 from llm import generate_embedding
 from vector import from_blob, normalize
@@ -9,6 +10,10 @@ from db import DB_PATH
 
 
 from config import VAULT_PATH
+
+INDEX_DIR = Path(DB_PATH).parent
+INDEX_FILE = INDEX_DIR / "notes.index"
+PATHS_FILE = INDEX_DIR / "notes.paths"
 
 def get_note_content(note_name: str):
     for file_path in VAULT_PATH.rglob("*.md"):
@@ -57,28 +62,51 @@ def build_index(vectors: np.ndarray):
     return index
 
 
+def save_index(index, paths):
+    faiss.write_index(index, str(INDEX_FILE))
+    with open(PATHS_FILE, "w") as f:
+        json.dump(paths, f)
+
+
+def load_index():
+    if not INDEX_FILE.exists() or not PATHS_FILE.exists():
+        return None, None
+    try:
+        index = faiss.read_index(str(INDEX_FILE))
+        with open(PATHS_FILE) as f:
+            paths = json.load(f)
+        return paths, index
+    except Exception:
+        return None, None
+
+
+def build_and_persist_index():
+    paths, vectors = load_embeddings()
+    if len(paths) == 0:
+        return
+    index = build_index(vectors)
+    save_index(index, paths)
+    print(f"FAISS index persisted ({len(paths)} vectors)")
+
+
 def search(query: str, k: int = 5):
-    # 1. embed query
     query_vec = generate_embedding(query)
 
     if not query_vec:
         return []
 
-    # 2. normalize query (IMPORTANT)
     query_vec = normalize(query_vec).astype("float32")
 
     query_vec = np.expand_dims(query_vec, axis=0)
 
-    # 3. load data
-    paths, vectors = load_embeddings()
+    paths, index = load_index()
+    if paths is None:
+        paths, vectors = load_embeddings()
+        if len(paths) == 0:
+            return []
+        index = build_index(vectors)
 
-    if len(paths) == 0:
-        return []
-
-    # 4. build index
-    index = build_index(vectors)
-
-    # 5. search
+    # search
     scores, indices = index.search(query_vec, k)
 
     results = []

@@ -1,4 +1,4 @@
-from config import OLLAMA_MODEL, OLLAMA_URL
+from config import OLLAMA_URL
 import requests
 import numpy as np
 

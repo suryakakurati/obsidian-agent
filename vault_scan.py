@@ -3,17 +3,18 @@ import sqlite3
 import time
 
 from db import (
-    DB_PATH,
     initialize_db,
     get_file_hash,
     build_note_record,
     upsert_notes_batch
 )
 
-from config import VAULT_PATH
+
+from config import VAULT_PATH, DB_PATH
+from retrieval import build_and_persist_index
 
 
-PROGRESS_INTERVAL = 1000
+PROGRESS_INTERVAL = 10
 
 
 def add_all(vault_path: Path = VAULT_PATH):
@@ -70,6 +71,11 @@ def add_all(vault_path: Path = VAULT_PATH):
 
     finally:
         conn.close()
+
+    try:
+        build_and_persist_index()
+    except Exception as e:
+        print(f"Warning: Failed to persist FAISS index: {e}")
 
     print(
         f"\nIndexing completed in "
@@ -161,6 +167,12 @@ def scan_updates(vault_path: Path = VAULT_PATH):
 
     finally:
         conn.close()
+
+    if changed_files:
+        try:
+            build_and_persist_index()
+        except Exception as e:
+            print(f"Warning: Failed to persist FAISS index: {e}")
 
     print(
         f"\nScan completed in "
