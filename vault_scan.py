@@ -127,6 +127,8 @@ def scan_updates(vault_path: Path = VAULT_PATH):
 
     changed_files = []
     batch = []
+    disk_paths = set()
+    deleted_paths = []
 
     start_time = time.time()
     processed = 0
@@ -134,6 +136,7 @@ def scan_updates(vault_path: Path = VAULT_PATH):
 
     try:
         for file_path in vault_path.rglob("*.md"):
+            disk_paths.add(str(file_path))
             record, embedding_time, is_new = _handle_file(file_path, cursor)
 
             if record is None:
@@ -147,6 +150,22 @@ def scan_updates(vault_path: Path = VAULT_PATH):
             if processed % PROGRESS_INTERVAL == 0 and not is_new:
                 _print_progress(processed, start_time, total_embedding_time)
 
+        cursor.execute("SELECT path FROM notes")
+        deleted_paths = [
+            row[0] for row in cursor.fetchall()
+            if row[0] not in disk_paths
+        ]
+
+        if deleted_paths:
+            chunk_size = 999
+            for i in range(0, len(deleted_paths), chunk_size):
+                chunk = deleted_paths[i:i + chunk_size]
+                placeholders = ",".join("?" for _ in chunk)
+                cursor.execute(
+                    f"DELETE FROM notes WHERE path IN ({placeholders})",
+                    chunk
+                )
+
         if batch:
             upsert_notes_batch(batch, conn)
 
@@ -159,7 +178,7 @@ def scan_updates(vault_path: Path = VAULT_PATH):
     finally:
         conn.close()
 
-    if changed_files:
+    if changed_files or deleted_paths:
         try:
             build_and_persist_index()
         except Exception as e:
@@ -170,4 +189,5 @@ def scan_updates(vault_path: Path = VAULT_PATH):
         f"{time.time() - start_time:.2f} seconds.\n"
     )
 
+    changed_files.extend(deleted_paths)
     return changed_files
