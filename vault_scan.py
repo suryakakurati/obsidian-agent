@@ -14,7 +14,7 @@ from config import VAULT_PATH, DB_PATH
 from retrieval import build_and_persist_index
 
 
-PROGRESS_INTERVAL = 10
+PROGRESS_INTERVAL = 1000
 
 
 def get_note_content(note_name: str):
