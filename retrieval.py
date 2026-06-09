@@ -1,82 +1,46 @@
-from pathlib import Path
-import sqlite3
 import numpy as np
-import faiss
-import json
+from pathlib import Path
 
+from faiss_index import (
+    load_index, build_index, save_index,
+    load_embeddings, faiss_search
+)
+from bm25 import load_bm25, bm25_search, build_bm25_index, BM25Okapi  # noqa: F401 — backward compat for old pickles
 from llm import generate_embedding
-from vector import from_blob, normalize
+from vector import normalize
+
+RRF_K = 60
+FAISS_FLOOR = 0.52
+FAISS_GUARANTEE = 0.80
+SUGGEST_TOP_K = 5
 
 
-from config import VAULT_PATH, DB_PATH 
-
-INDEX_DIR = Path(DB_PATH).parent
-INDEX_FILE = INDEX_DIR / "notes.index"
-PATHS_FILE = INDEX_DIR / "notes.paths"
-
-def get_note_content(note_name: str):
-    for file_path in VAULT_PATH.rglob("*.md"):
-        if file_path.name == note_name:
-            return file_path.read_text(
-                encoding="utf-8",
-                errors="ignore"
-            )
-
-    return None
-
-def load_embeddings():
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-
-    cursor.execute("SELECT path, embedding FROM notes")
-    rows = cursor.fetchall()
-
-    conn.close()
-
-    paths = []
-    vectors = []
-
-    for path, blob in rows:
-        vec = from_blob(blob)
-
-        # safety check (should already be normalized)
-        norm = np.linalg.norm(vec)
-        if norm == 0:
-            continue
-
-        paths.append(path)
-        vectors.append(vec)
-
-    if not vectors:
-        return [], np.array([])
-
-    return paths, np.vstack(vectors).astype("float32")
-
-def build_index(vectors: np.ndarray):
-    dimension = vectors.shape[1]
-
-    index = faiss.IndexFlatIP(dimension)
-    index.add(vectors)
-
-    return index
+def _rrf_merge(faiss_results: list[dict], bm25_results: list[dict], top_k: int) -> list[dict]:
+    scores = {}
+    for rank, r in enumerate(faiss_results):
+        scores[r["path"]] = scores.get(r["path"], 0) + 1 / (RRF_K + rank + 1)
+    for rank, r in enumerate(bm25_results):
+        scores[r["path"]] = scores.get(r["path"], 0) + 1 / (RRF_K + rank + 1)
+    sorted_paths = sorted(scores, key=scores.get, reverse=True)[:top_k]
+    return [{"path": p, "hybrid": scores[p]} for p in sorted_paths]
 
 
-def save_index(index, paths):
-    faiss.write_index(index, str(INDEX_FILE))
-    with open(PATHS_FILE, "w") as f:
-        json.dump(paths, f)
+def filter_by_tiers(results: list[dict], top_k: int = SUGGEST_TOP_K) -> list[dict]:
+    if top_k < 1:
+        return []
 
+    non_self = [r for r in results if r["faiss"] < 0.99]
+    guaranteed = [r for r in non_self if r["faiss"] > FAISS_GUARANTEE]
+    middle = [r for r in non_self if FAISS_FLOOR <= r["faiss"] <= FAISS_GUARANTEE]
 
-def load_index():
-    if not INDEX_FILE.exists() or not PATHS_FILE.exists():
-        return None, None
-    try:
-        index = faiss.read_index(str(INDEX_FILE))
-        with open(PATHS_FILE) as f:
-            paths = json.load(f)
-        return paths, index
-    except Exception:
-        return None, None
+    guaranteed.sort(key=lambda r: r["faiss"], reverse=True)
+    middle.sort(key=lambda r: r["hybrid"], reverse=True)
+
+    output = guaranteed[:top_k]
+    if len(output) < top_k:
+        output.extend(middle[:top_k - len(output)])
+
+    return output
 
 
 def build_and_persist_index():
@@ -86,16 +50,20 @@ def build_and_persist_index():
     index = build_index(vectors)
     save_index(index, paths)
     print(f"FAISS index persisted ({len(paths)} vectors)")
+    try:
+        build_bm25_index(paths)
+        print(f"BM25 index persisted ({len(paths)} docs)")
+    except Exception as e:
+        print(f"Warning: Failed to persist BM25 index: {e}")
 
 
 def search(query: str, k: int = 5):
+    if k < 1:
+        return []
     query_vec = generate_embedding(query)
-
     if not query_vec:
         return []
-
     query_vec = normalize(query_vec).astype("float32")
-
     query_vec = np.expand_dims(query_vec, axis=0)
 
     paths, index = load_index()
@@ -105,18 +73,24 @@ def search(query: str, k: int = 5):
             return []
         index = build_index(vectors)
 
-    # search
-    scores, indices = index.search(query_vec, k)
+    faiss_results = faiss_search(query_vec, index, paths, k)
+
+    bm25_paths, bm25 = load_bm25()
+    bm25_results = bm25_search(query, bm25, bm25_paths, k)
+
+    merged = _rrf_merge(faiss_results, bm25_results, k)
+
+    faiss_lookup = {r["path"]: r["faiss_score"] for r in faiss_results}
+    bm25_lookup = {r["path"]: r["bm25_score"] for r in bm25_results}
 
     results = []
-
-    for score, idx in zip(scores[0], indices[0]):
-        if idx == -1:
-            continue
-
+    for r in merged:
+        path = r["path"]
         results.append({
-            "path": paths[idx],
-            "score": float(score)
+            "name": Path(path).stem,
+            "path": path,
+            "faiss": faiss_lookup.get(path, 0.0),
+            "bm25": bm25_lookup.get(path, 0.0),
+            "hybrid": r["hybrid"]
         })
-
     return results

@@ -17,6 +17,16 @@ from retrieval import build_and_persist_index
 PROGRESS_INTERVAL = 10
 
 
+def get_note_content(note_name: str):
+    for file_path in VAULT_PATH.rglob("*.md"):
+        if file_path.name == note_name:
+            return file_path.read_text(
+                encoding="utf-8",
+                errors="ignore"
+            )
+    return None
+
+
 def add_all(vault_path: Path = VAULT_PATH):
     initialize_db()
 

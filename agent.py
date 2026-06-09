@@ -1,9 +1,24 @@
-from vault_scan import add_all, scan_updates
+from vault_scan import add_all, scan_updates, get_note_content
 from config import VAULT_PATH, DB_PATH
-from retrieval import search, get_note_content
+from retrieval import search, filter_by_tiers
+import sqlite3
 
 
-def similar_notes(note_name: str):
+def print_similar(results: list[dict]):
+    if not results:
+        print("No similar notes found.")
+        return
+    print(f"{'Note':<40} {'FAISS':<8} {'BM25':<8} {'Hybrid':<8}")
+    print("-" * 68)
+    for r in results:
+        name = r["name"]
+        faiss = r["faiss"]
+        bm25 = r["bm25"]
+        hybrid = r["hybrid"]
+        print(f"{name:<40} {faiss:<8.4f} {bm25:<8.2f} {hybrid:<8.4f}")
+
+
+def similar_notes(note_name: str, k: int = 5):
 
     if not DB_PATH.exists():
         print("Database not found. Please run the agent to index the vault first.")
@@ -13,9 +28,12 @@ def similar_notes(note_name: str):
     content = get_note_content(note_name)
 
     if content:
-        results = search(content)
-        for r in results:
-            print(r)
+        conn = sqlite3.connect(DB_PATH)
+        n = conn.execute("SELECT COUNT(*) FROM notes").fetchone()[0]
+        conn.close()
+        results = search(content, k=n)
+        filtered = filter_by_tiers(results, top_k=k)
+        print_similar(filtered)
     else:
         print("Note not found.")
 
