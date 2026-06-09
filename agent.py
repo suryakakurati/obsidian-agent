@@ -20,6 +20,10 @@ def print_similar(results: list[dict]):
 
 def similar_notes(note_name: str, k: int = 5):
 
+    if not note_name or not note_name.strip():
+        print("Note name cannot be empty.")
+        return
+
     if not DB_PATH.exists():
         print("Database not found. Please run the agent to index the vault first.")
         return

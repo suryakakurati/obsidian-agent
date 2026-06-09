@@ -5,7 +5,7 @@ from faiss_index import (
     load_index, build_index, save_index,
     load_embeddings, faiss_search
 )
-from bm25 import load_bm25, bm25_search, build_bm25_index, BM25Okapi  # noqa: F401 — backward compat for old pickles
+from bm25 import load_bm25, bm25_search, build_bm25_index, _tokenize, BM25Okapi  # noqa: F401 — backward compat for old pickles
 from llm import generate_embedding
 from vector import normalize
 
@@ -13,6 +13,7 @@ RRF_K = 60
 FAISS_FLOOR = 0.52
 FAISS_GUARANTEE = 0.80
 SUGGEST_TOP_K = 5
+MIN_QUERY_TOKENS = 5
 
 
 def _rrf_merge(faiss_results: list[dict], bm25_results: list[dict], top_k: int) -> list[dict]:
@@ -59,6 +60,10 @@ def build_and_persist_index():
 
 def search(query: str, k: int = 5):
     if k < 1:
+        return []
+    if not query or not query.strip():
+        return []
+    if len(_tokenize(query)) < MIN_QUERY_TOKENS:
         return []
     query_vec = generate_embedding(query)
     if not query_vec:

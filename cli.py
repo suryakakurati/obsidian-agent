@@ -28,7 +28,11 @@ def main():
         maintenance()
 
     elif args.command == "similar":
-        similar_notes(args.note_name, k=args.top_k)
+        if not args.note_name or not args.note_name.strip():
+            parser.error("note_name cannot be empty")
+        if args.top_k < 1:
+            parser.error("top-k must be >= 1")
+        similar_notes(args.note_name.strip(), k=args.top_k)
 
     else:
         parser.print_help()
