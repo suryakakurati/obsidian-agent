@@ -4,6 +4,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+RRF_K = 60
+FAISS_FLOOR = 0.52
+FAISS_GUARANTEE = 0.80
+SUGGEST_TOP_K = 5
+MIN_QUERY_TOKENS = 5
+
 OLLAMA_URL = os.getenv("OLLAMA_URL")
 if not OLLAMA_URL:
     raise ValueError("OLLAMA_URL is required. Set it in .env")

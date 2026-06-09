@@ -9,11 +9,9 @@ from bm25 import load_bm25, bm25_search, build_bm25_index, _tokenize, BM25Okapi 
 from llm import generate_embedding
 from vector import normalize
 
-RRF_K = 60
-FAISS_FLOOR = 0.52
-FAISS_GUARANTEE = 0.80
-SUGGEST_TOP_K = 5
-MIN_QUERY_TOKENS = 5
+from config import (
+    RRF_K, SUGGEST_TOP_K, FAISS_GUARANTEE, FAISS_FLOOR, MIN_QUERY_TOKENS
+)
 
 
 def _rrf_merge(faiss_results: list[dict], bm25_results: list[dict], top_k: int) -> list[dict]:
