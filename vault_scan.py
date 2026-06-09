@@ -122,6 +122,7 @@ def _print_progress(processed: int, start_time: float, total_embedding_time: flo
 
 
 def scan_updates(vault_path: Path = VAULT_PATH):
+    initialize_db()
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 

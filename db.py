@@ -18,7 +18,16 @@ def initialize_db():
         path TEXT UNIQUE,
         hash TEXT,
         embedding BLOB,
-        last_modified REAL
+        last_modified REAL,
+        evaluated INTEGER DEFAULT 0
+    )
+    """)
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS checked_pairs (
+        hash_a TEXT NOT NULL,
+        hash_b TEXT NOT NULL,
+        PRIMARY KEY (hash_a, hash_b)
     )
     """)
 
@@ -76,7 +85,8 @@ def upsert_notes_batch(records, conn: sqlite3.Connection):
             ON CONFLICT(path) DO UPDATE SET
                 hash=excluded.hash,
                 embedding=excluded.embedding,
-                last_modified=excluded.last_modified
+                last_modified=excluded.last_modified,
+                evaluated=0
         """, records)
 
         cursor.execute("RELEASE SAVEPOINT upsert_batch")

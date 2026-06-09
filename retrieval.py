@@ -6,10 +6,9 @@ import json
 
 from llm import generate_embedding
 from vector import from_blob, normalize
-from db import DB_PATH
 
 
-from config import VAULT_PATH
+from config import VAULT_PATH, DB_PATH 
 
 INDEX_DIR = Path(DB_PATH).parent
 INDEX_FILE = INDEX_DIR / "notes.index"
